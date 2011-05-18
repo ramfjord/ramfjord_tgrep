@@ -1,0 +1,39 @@
+Hi Reddit Programming Team!
+
+This would have been much easier in ruby/perl, but I decided to do it in badass C because you said it should be fast.
+just type make, and I sincerely hope it will work.  I don't think I used any non-standard libraries. I tested it on 64-bit arch and 32-bit ubuntu.
+
+My version of tgrep uses a patented "not exactly binary" search, which estimates the distance in the file to the start time, jumps to that distance, checks, and then either re-estimates or starts a linear search.  This is basically what you do when you look a word up in a real dictionary.
+
+While estimating the distance, I assumed that the logs were normally distributed across all the time periods.  This worked well with the log-generator script, but I suspect it would be a little worse in practice.
+
+
+RUN TIME:
+  The average case run-time of this depends on the distribution of logs.  If it is normal, as the file grows the run-time becomes constant (the estimate gets more and more accurate).  The worst case, however is O(n), or linear.  This would be the case if we had a file composed almost entirely of logs from a single second.
+
+In the test file, the standard tgrep always showed 3-4 lseeks.  Considering that the 1 is used to find the last time in the file, and 1 is used to go back to where we just read after getting close enough, it's not bad.  I believe I know why I sometimes didn't get 3, but it wasn't worth it to fix it.  Also it's too long to write here. You can ask me about it in my interview.  As the file size increased, the number did not increase, because it just made the distribution more normal.
+
+In addition to this not exactly binary search, there is also a real binary search that you can do by adding a "-b".  This has worst case run-time of log(n), and average case run-time of log(n).  Because log(n) goes up sooooo slowly with n, the constant time really isn't much better.  Debated making this the default version, but I think the other one will be slightly faster on the log files.  The other one does, of course, run faster on the generated log files, because they are normally distributed.
+
+In the test file, the standard binary search usually showed several more lseeks.  The max I got was 19, on a 3 gig file.  This probably seems like a lot more, but it's still a trivial amount.
+
+I didn't pay much attention to the amount of reads, because there will be 1 for each lseek.  In a large file the seek function will almost certainly find the second before the second we're looking for.  This is optimal - we wouldn't want to seek to the second we're looking for, because we might miss some in the beginning.  After this it's a linear search where everything in the range will be read in.  So basically no matter what I have to read in the same amount of stuff.  I could lower the amount of reads by increasing the buffer size, but it doesn't seem to make much of a difference.
+
+ISSUES:
+This will probably not work on files with multiple midnight crossings.  This is because I essentially use a boolean variable to keep track of the day, because I didn't want to make something to do modular arithmetic for days of the month.  It would be relatively easy to change that if necessary though.
+
+If you enter a time-range that crosses the beginning/end of the file, then you get an error message, unless you add the parameter "-s" or "-e"
+  -s:	truncates the [s]tarting time you entered to the first time in the file
+  -e:	truncates the [e]nding time you entered to the end time of the file
+Ex: file goes from 7 am Monday to 8 am Tuesday
+  $ tgrep 5-9
+    -error
+  $ tgrep 5-9 -s
+    - logs from 7-9 am monday
+  $ tgrep 5-9 -e
+    - logs from 7-8 am tuesday
+
+If you enter a time range that occurs  multiple times in a single file, tgrep will always display the first one.  This won't happen if the file is actually 24 hours.  Could add an option to change this, but don't know if it's necessary.
+
+I assumed that a log couldn't be larger than 1000 characters, and if it is, it might fail.  An easy way to fix this, however, would be to increase the values MAX_LINE_LEN and SEARCH_B_SIZE is tgrep.h.  Make sure MAX_LINE_LEN is never > SEARCH_B_SIZE.
+
